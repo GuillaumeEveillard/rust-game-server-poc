@@ -5,6 +5,7 @@ authors = ["Guillaume Eveillard"]
 edition = "2018"
 
 [dependencies]
+pancurses = "0.16"
 tonic = { version = "0.1.1", features = ["tls"] }
 prost = "0.6"
 prost-types = "0.6"
