@@ -1,0 +1,22 @@
+[package]
+name = "rust-game-server-poc"
+version = "0.1.0"
+authors = ["Guillaume Eveillard"]
+edition = "2018"
+
+[dependencies]
+tonic = { version = "0.1.1", features = ["tls"] }
+prost = "0.6"
+prost-types = "0.6"
+tokio = { version = "0.2", features = ["macros"] }
+
+[build-dependencies]
+tonic-build = { version = "0.1.1" }
+
+[[bin]]
+name = "server"
+path = "src/server/server.rs"
+
+[[bin]]
+name = "client"
+path = "src/client/client.rs"
