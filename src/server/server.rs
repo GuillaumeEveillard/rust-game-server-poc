@@ -1,25 +1,22 @@
 use tonic::{transport::Server, Request, Response, Status};
 
-use hello_world::greeter_server::{Greeter, GreeterServer};
-use hello_world::{HelloReply, HelloRequest};
+use game_master::game_master_server::{GameMaster, GameMasterServer};
+use game_master::{Action, ActionResult};
 use std::sync::{Mutex, Arc};
 use echo::{
     echo_server::{Echo, EchoServer},
     EchoRequest, EchoResponse,
 };
-use tonic::codegen::Stream;
-use std::pin::Pin;
+
 use tokio::sync::mpsc;
 
-pub mod hello_world {
-    tonic::include_proto!("helloworld");
+pub mod game_master {
+    tonic::include_proto!("gamemaster");
 }
 
 pub mod echo {
     tonic::include_proto!("grpc.examples.echo");
 }
-
-type ResponseStream = Pin<Box<dyn Stream<Item = Result<EchoResponse, Status>> + Send + Sync>>;
 
 struct StateManager {
     counter: u32
@@ -47,8 +44,8 @@ impl MyGreeter {
 }
 
 #[tonic::async_trait]
-impl Greeter for MyGreeter {
-    async fn say_hello(&self, request: Request<HelloRequest>, ) -> Result<Response<HelloReply>, Status> {
+impl GameMaster for MyGreeter {
+    async fn send_action(&self, request: Request<Action>, ) -> Result<Response<ActionResult>, Status> {
         println!("Got a request from {:?}", request.remote_addr());
         
         let lock = self.state_manager.lock();
@@ -56,7 +53,7 @@ impl Greeter for MyGreeter {
         state.inc();
         let c = state.counter;
 
-        let reply = hello_world::HelloReply {
+        let reply = game_master::ActionResult {
             message: format!("Hello {}! Counter={}", request.into_inner().name, c),
         };
         Ok(Response::new(reply))
@@ -111,7 +108,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("GreeterServer listening on {}", addr);
 
     Server::builder()
-        .add_service(GreeterServer::new(greeter))
+        .add_service(GameMasterServer::new(greeter))
         .add_service(echo)
         .serve(addr)
         .await?;

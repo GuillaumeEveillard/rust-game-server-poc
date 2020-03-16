@@ -1,0 +1,15 @@
+syntax = "proto3";
+
+package gamemaster;
+
+service GameMaster {
+  rpc SendAction (Action) returns (ActionResult) {}
+}
+
+message Action {
+  string name = 1;
+}
+
+message ActionResult {
+  string message = 1;
+}

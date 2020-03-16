@@ -2,12 +2,12 @@ extern crate pancurses;
 
 use pancurses::{initscr, endwin, Input, noecho};
 
-use hello_world::greeter_client::GreeterClient;
-use hello_world::HelloRequest;
+use game_master::game_master_client::GameMasterClient;
+use game_master::Action;
 use tonic::transport::{Endpoint, Channel};
 
-pub mod hello_world {
-    tonic::include_proto!("helloworld");
+pub mod game_master {
+    tonic::include_proto!("gamemaster");
 }
 
 pub mod echo {
@@ -15,10 +15,9 @@ pub mod echo {
 }
 use echo::{echo_client::EchoClient, EchoRequest};
 use std::error::Error;
-use tonic::Status;
 
 struct GameClient {
-    greeter_client : GreeterClient<Channel>,
+    game_master_client: GameMasterClient<Channel>,
     echo_client :EchoClient<Channel>
 }
 
@@ -28,17 +27,17 @@ impl GameClient {
             .connect()
             .await?;
 
-        let mut greeter_client = GreeterClient::new(channel.clone());
-        let mut echo_client = EchoClient::new(channel);
-        Ok(GameClient{greeter_client, echo_client})
+        let greeter_client = GameMasterClient::new(channel.clone());
+        let echo_client = EchoClient::new(channel);
+        Ok(GameClient{ game_master_client: greeter_client, echo_client})
     }
 
     async fn say_hello(&mut self) {
-        let request = tonic::Request::new(HelloRequest {
+        let request = tonic::Request::new(Action {
             name: "Tonic".into(),
         });
 
-        let response = self.greeter_client.say_hello(request).await.unwrap();
+        let response = self.game_master_client.send_action(request).await.unwrap();
 
         println!("RESPONSE={:?}", response);
     }
@@ -86,9 +85,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("heu");
     game_client.listen_to_echo().await;
     println!("heu");
-
-
-
-
+    
     Ok(())
 }
