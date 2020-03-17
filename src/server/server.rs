@@ -45,7 +45,7 @@ impl GameMaster for GameServer {
         let c = state.counter;
 
         let reply = game_master::ActionResult {
-            message: format!("Hello {}! Counter={}", request.into_inner().name, c),
+            message: format!("Hello {}! Counter={}", request.into_inner().spell, c),
         };
         Ok(Response::new(reply))
     }
@@ -56,9 +56,9 @@ impl GameMaster for GameServer {
         let (mut tx, rx) = mpsc::channel::<Result<GameStateResponse, Status>>(10);
 
         tokio::spawn(async move {
-            let start : i32 = 0;
+            let start : u64 = 0;
             for i in start..10 {
-                let to_send = GameStateResponse{message: format!("Echo {}", i)};
+                let to_send = GameStateResponse{counter: i, living_beings: [].to_vec()};
                 let result: Result<GameStateResponse, Status> = Ok(to_send);
                 tx.send(result).await.unwrap();
             }

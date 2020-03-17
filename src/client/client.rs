@@ -8,6 +8,7 @@ use tonic::transport::{Channel, Endpoint};
 use game_master::Action;
 use game_master::game_master_client::GameMasterClient;
 use game_master::GameStateRequest;
+use game_master::action::Spell;
 
 pub mod game_master {
     tonic::include_proto!("gamemaster");
@@ -29,7 +30,7 @@ impl GameClient {
 
     async fn send_action(&mut self) {
         let request = tonic::Request::new(Action {
-            name: "Tonic".into(),
+            spell: Spell::Fireball as i32,
         });
 
         let response = self.game_master_client.send_action(request).await.unwrap();

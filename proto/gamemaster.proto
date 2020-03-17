@@ -8,7 +8,11 @@ service GameMaster {
 }
 
 message Action {
-  string name = 1;
+  enum Spell {
+      FIREBALL = 0;
+      FROST_BALL = 1;
+  }
+  Spell spell = 1;
 }
 
 message ActionResult {
@@ -20,5 +24,12 @@ message GameStateRequest {
 }
 
 message GameStateResponse {
-  string message = 1;
+  uint64 counter = 1;
+  repeated LivingBeing living_beings = 2;
+}
+
+message LivingBeing {
+  uint64 id = 1;
+  string name = 2;
+  uint32 health = 3;
 }
