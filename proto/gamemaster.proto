@@ -4,6 +4,7 @@ package gamemaster;
 
 service GameMaster {
   rpc SendAction (Action) returns (ActionResult) {}
+  rpc GameStateStreaming(GameStateRequest) returns (stream GameStateResponse) {}
 }
 
 message Action {
@@ -11,5 +12,13 @@ message Action {
 }
 
 message ActionResult {
+  string message = 1;
+}
+
+message GameStateRequest {
+  string message = 1;
+}
+
+message GameStateResponse {
   string message = 1;
 }

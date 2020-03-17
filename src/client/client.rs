@@ -1,24 +1,20 @@
 extern crate pancurses;
 
-use pancurses::{initscr, endwin, Input, noecho};
+use std::error::Error;
 
-use game_master::game_master_client::GameMasterClient;
+use pancurses::{endwin, initscr, Input, noecho};
+use tonic::transport::{Channel, Endpoint};
+
 use game_master::Action;
-use tonic::transport::{Endpoint, Channel};
+use game_master::game_master_client::GameMasterClient;
+use game_master::GameStateRequest;
 
 pub mod game_master {
     tonic::include_proto!("gamemaster");
 }
 
-pub mod echo {
-    tonic::include_proto!("grpc.examples.echo");
-}
-use echo::{echo_client::EchoClient, EchoRequest};
-use std::error::Error;
-
 struct GameClient {
     game_master_client: GameMasterClient<Channel>,
-    echo_client :EchoClient<Channel>
 }
 
 impl GameClient {
@@ -28,11 +24,10 @@ impl GameClient {
             .await?;
 
         let greeter_client = GameMasterClient::new(channel.clone());
-        let echo_client = EchoClient::new(channel);
-        Ok(GameClient{ game_master_client: greeter_client, echo_client})
+        Ok(GameClient{ game_master_client: greeter_client})
     }
 
-    async fn say_hello(&mut self) {
+    async fn send_action(&mut self) {
         let request = tonic::Request::new(Action {
             name: "Tonic".into(),
         });
@@ -42,9 +37,9 @@ impl GameClient {
         println!("RESPONSE={:?}", response);
     }
 
-    async fn listen_to_echo(&mut self) {
-        let request = EchoRequest{message: "Hello echo".to_string()};
-        let response = self.echo_client.server_streaming_echo(request).await.unwrap();
+    async fn subscribe_to_game_state_update(&mut self) {
+        let request = GameStateRequest{message: "Hello echo".to_string()};
+        let response = self.game_master_client.game_state_streaming(request).await.unwrap();
 
         let mut inbound = response.into_inner();
 
@@ -57,8 +52,6 @@ impl GameClient {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut game_client = GameClient::new().await?;
-
-    println!("heu");
     
     let window = initscr();
     window.printw("Type things, press delete to quit\n");
@@ -81,10 +74,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     endwin();
 
-    game_client.say_hello().await;
-    println!("heu");
-    game_client.listen_to_echo().await;
-    println!("heu");
+    game_client.send_action().await;
+    game_client.subscribe_to_game_state_update().await;
     
     Ok(())
 }

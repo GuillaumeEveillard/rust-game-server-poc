@@ -1,21 +1,13 @@
-use tonic::{transport::Server, Request, Response, Status};
-
-use game_master::game_master_server::{GameMaster, GameMasterServer};
-use game_master::{Action, ActionResult};
-use std::sync::{Mutex, Arc};
-use echo::{
-    echo_server::{Echo, EchoServer},
-    EchoRequest, EchoResponse,
-};
+use std::sync::{Arc, Mutex};
 
 use tokio::sync::mpsc;
+use tonic::{Request, Response, Status, transport::Server};
+
+use game_master::{Action, ActionResult, GameStateRequest, GameStateResponse};
+use game_master::game_master_server::{GameMaster, GameMasterServer};
 
 pub mod game_master {
     tonic::include_proto!("gamemaster");
-}
-
-pub mod echo {
-    tonic::include_proto!("grpc.examples.echo");
 }
 
 struct StateManager {
@@ -23,7 +15,6 @@ struct StateManager {
 }
 
 impl StateManager {
-    
     fn new() -> StateManager {
         StateManager{counter: 0}
     }
@@ -33,18 +24,18 @@ impl StateManager {
     }
 }
 
-pub struct MyGreeter {
+pub struct GameServer {
     state_manager: Arc<Mutex<StateManager>>
 }
 
-impl MyGreeter {
-    fn new(state_manager: Arc<Mutex<StateManager>>) -> MyGreeter {
-        MyGreeter{state_manager}
+impl GameServer {
+    fn new(state_manager: Arc<Mutex<StateManager>>) -> GameServer {
+        GameServer {state_manager}
     }
 }
 
 #[tonic::async_trait]
-impl GameMaster for MyGreeter {
+impl GameMaster for GameServer {
     async fn send_action(&self, request: Request<Action>, ) -> Result<Response<ActionResult>, Status> {
         println!("Got a request from {:?}", request.remote_addr());
         
@@ -58,27 +49,17 @@ impl GameMaster for MyGreeter {
         };
         Ok(Response::new(reply))
     }
-}
 
-#[derive(Default)]
-pub struct MyEcho;
+    type GameStateStreamingStream = mpsc::Receiver<Result<GameStateResponse, Status>>;
 
-#[tonic::async_trait]
-impl Echo for MyEcho {
-
-    type ServerStreamingEchoStream = mpsc::Receiver<Result<EchoResponse, Status>>;
-
-    async fn server_streaming_echo(
-        &self,
-        _: Request<EchoRequest>,
-    ) -> Result<Response<Self::ServerStreamingEchoStream>, Status> {
-        let (mut tx, rx) = mpsc::channel::<Result<EchoResponse, Status>>(10);
+    async fn game_state_streaming(&self, _: Request<GameStateRequest>, ) -> Result<Response<Self::GameStateStreamingStream>, Status> {
+        let (mut tx, rx) = mpsc::channel::<Result<GameStateResponse, Status>>(10);
 
         tokio::spawn(async move {
             let start : i32 = 0;
             for i in start..10 {
-                let to_send = EchoResponse{message: format!("Echo {}", i)};
-                let result: Result<EchoResponse, Status> = Ok(to_send);
+                let to_send = GameStateResponse{message: format!("Echo {}", i)};
+                let result: Result<GameStateResponse, Status> = Ok(to_send);
                 tx.send(result).await.unwrap();
             }
 
@@ -87,13 +68,6 @@ impl Echo for MyEcho {
 
         Ok(Response::new(rx))
     }
-
-    // type BidirectionalStreamingEchoStream = ResponseStream;
-    
-    // async fn bidirectional_streaming_echo(&self, _: Request<tonic::Streaming<EchoRequest>>, ) -> Result<Response<Self::BidirectionalStreamingEchoStream>, Status> {
-    //     let r: Result<Response<Self::BidirectionalStreamingEchoStream>, Status> = Result::Err(Status::aborted("paf"));
-    //     r
-    // }
 }
 
 #[tokio::main]
@@ -101,15 +75,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let addr = "[::1]:50051".parse().unwrap();
     let state_manager = StateManager::new();
     let state_handle = Arc::new(Mutex::new(state_manager));
-    let greeter = MyGreeter::new(state_handle);
-
-    let echo = EchoServer::new(MyEcho::default());
+    let greeter = GameServer::new(state_handle);
 
     println!("GreeterServer listening on {}", addr);
 
     Server::builder()
         .add_service(GameMasterServer::new(greeter))
-        .add_service(echo)
         .serve(addr)
         .await?;
 
