@@ -5,6 +5,7 @@ use tonic::{Request, Response, Status, transport::Server};
 
 use game_master::{Action, ActionResult, GameStateRequest, GameStateResponse, LivingBeing};
 use game_master::game_master_server::{GameMaster, GameMasterServer};
+use std::time::{Instant, Duration};
 
 pub mod game_master {
     tonic::include_proto!("gamemaster");
@@ -17,7 +18,9 @@ struct StateManager {
 
 impl StateManager {
     fn new() -> StateManager {
-        StateManager{counter: 0, living_beings: Vec::new()}
+        let mut living_beings = Vec::new();
+        living_beings.push(LivingBeing{id: 1, name: "Murloc du chaos".to_string(), health: 100});
+        StateManager{counter: 0, living_beings}
     }
     
     fn inc(&mut self) {
@@ -60,13 +63,18 @@ impl GameMaster for GameServer {
         let sm = self.state_manager.clone();
         
         tokio::spawn(async move {
-            let state = sm.lock();
-            
+            let mut interval = tokio::time::interval_at(tokio::time::Instant::now(), Duration::from_secs(1));
+
             let start : u64 = 0;
             for i in start..10 {
-                let to_send = GameStateResponse{counter: i, living_beings: [].to_vec()};
+                interval.tick().await;
+
+                let state = sm.lock().await;
+                let to_send = GameStateResponse{counter: i, living_beings: state.living_beings.clone()};
                 let result: Result<GameStateResponse, Status> = Ok(to_send);
                 tx.send(result).await.unwrap();
+                
+                tokio::task::yield_now().await;
             }
 
             println!(" /// done sending");
