@@ -38,12 +38,35 @@ impl GameServer {
     }
 }
 
+impl LivingBeing {
+    fn update_health(&mut self, diff: i32) {
+        self.health = std::cmp::max(0, self.health as i32 + diff) as u32; //il y a un risque d'overflow ici  
+    }
+}
+
 #[tonic::async_trait]
 impl GameMaster for GameServer {
     async fn send_action(&self, request: Request<Action>, ) -> Result<Response<ActionResult>, Status> {
         println!("Got a request from {:?}", request.remote_addr());
         
+        let action = request.get_ref();
+        let spell = action.spell;
+
         let mut state = self.state_manager.lock().await;
+        
+        match spell {
+            FIREBALL => { 
+                println!("Fireballlllllllll !");
+                let mut mob = state.living_beings.get_mut(0).unwrap();
+                mob.update_health(-30);
+            }
+            FROST_BALL => {
+                println!("Frostball");
+                let mut mob = state.living_beings.get_mut(0).unwrap();
+                mob.update_health(-20);
+            }
+        }
+      
         // let mut state = lock.unwrap();
         state.inc();
         let c = state.counter;
