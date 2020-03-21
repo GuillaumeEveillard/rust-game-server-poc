@@ -28,9 +28,9 @@ impl GameClient {
         Ok(GameClient{ game_master_client: greeter_client})
     }
 
-    async fn send_action(&mut self) {
+    async fn send_action(&mut self, spell: Spell) {
         let request = tonic::Request::new(Action {
-            spell: Spell::Fireball as i32,
+            spell: spell as i32,
         });
 
         let response = self.game_master_client.send_action(request).await.unwrap();
@@ -53,7 +53,8 @@ impl GameClient {
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut game_client = GameClient::new().await?;
-    
+
+    game_client.subscribe_to_game_state_update().await;    
     let window = initscr();
     window.printw("Type things, press delete to quit\n");
     window.refresh();
@@ -63,8 +64,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         match window.getch() {
             Some(Input::Character(c)) => { 
                 match c {
-                    '&' | '1' => {window.addstr("Fireball");}
-                    'é' | '2' => {window.addstr("Frostball");}
+                    '&' | '1' => {
+                        window.addstr("Fireball");
+                        game_client.send_action(Spell::Fireball).await;
+                    }
+                    'é' | '2' => {
+                        window.addstr("Frostball");
+                        game_client.send_action(Spell::FrostBall).await;
+                    }
                     _ => {}
                 }
             },
@@ -75,7 +82,7 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     }
     endwin();
 
-    game_client.send_action().await;
+
     game_client.subscribe_to_game_state_update().await;
     
     Ok(())

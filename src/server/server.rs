@@ -55,12 +55,12 @@ impl GameMaster for GameServer {
         let mut state = self.state_manager.lock().await;
         
         match spell {
-            FIREBALL => { 
+            Fireball => { 
                 println!("Fireballlllllllll !");
                 let mut mob = state.living_beings.get_mut(0).unwrap();
                 mob.update_health(-30);
             }
-            FROST_BALL => {
+            FrostBall => {
                 println!("Frostball");
                 let mut mob = state.living_beings.get_mut(0).unwrap();
                 mob.update_health(-20);
@@ -86,10 +86,10 @@ impl GameMaster for GameServer {
         let sm = self.state_manager.clone();
         
         tokio::spawn(async move {
-            let mut interval = tokio::time::interval_at(tokio::time::Instant::now(), Duration::from_secs(1));
+            let mut interval = tokio::time::interval_at(tokio::time::Instant::now(), Duration::from_secs(5));
 
             let start : u64 = 0;
-            for i in start..10 {
+            for i in start..20 {
                 interval.tick().await;
 
                 let state = sm.lock().await;
