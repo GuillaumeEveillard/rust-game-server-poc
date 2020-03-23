@@ -15,6 +15,35 @@ use ai_behavior::{
     While,
 };
 use uuid::Uuid;
+use gfx_device_gl::{CommandBuffer, Resources};
+use std::path::PathBuf;
+
+struct SpriteLoader {
+    texture_context: TextureContext<gfx_device_gl::Factory, Resources, CommandBuffer>,
+    assets: PathBuf
+}
+
+impl SpriteLoader {
+    fn new(window: &mut PistonWindow) -> SpriteLoader{
+        let mut texture_context = TextureContext {
+            factory: window.factory.clone(),
+            encoder: window.factory.create_command_buffer().into()
+        };
+        let assets = find_folder::Search::ParentsThenKids(3, 3).for_folder("assets").unwrap();
+        SpriteLoader{texture_context, assets}
+    }
+    
+    fn load(&mut self, filename: &str) -> Sprite<Texture<Resources>> {
+        let tex = Rc::new(Texture::from_path(
+            &mut self.texture_context,
+            self.assets.join(filename),
+            Flip::None,
+            &TextureSettings::new()
+        ).unwrap());
+
+        Sprite::from_texture(tex)
+    }
+}
 
 fn main() {
     let (width, height) = (1024, 768);
@@ -25,38 +54,18 @@ fn main() {
             .graphics_api(opengl)
             .build()
             .unwrap();
-
-    let assets = find_folder::Search::ParentsThenKids(3, 3)
-        .for_folder("assets").unwrap();
-    let id;
     let mut scene = Scene::new();
-    let mut texture_context = TextureContext {
-        factory: window.factory.clone(),
-        encoder: window.factory.create_command_buffer().into()
-    };
-    let tex = Rc::new(Texture::from_path(
-        &mut texture_context,
-        assets.join("rust.png"),
-        Flip::None,
-        &TextureSettings::new()
-    ).unwrap());
-
-    let mut sprite = Sprite::from_texture(tex.clone());
+    
+    let mut sprite_loader = SpriteLoader::new(&mut window);
+    
+    // Rust sprite
+    let mut sprite = sprite_loader.load("rust.png");
     sprite.set_position(width as f64 / 2.0, height as f64 / 2.0);
-
-    id = scene.add_child(sprite);
-
-
-    let mage_tex = Rc::new(Texture::from_path(
-        &mut texture_context,
-        assets.join("mage-idle1.png"),
-        Flip::None,
-        &TextureSettings::new()
-    ).unwrap());
-
-    let mut mage_sprite = Sprite::from_texture(mage_tex.clone());
+    let id = scene.add_child(sprite);
+    
+    // Mage sprite
+    let mut mage_sprite = sprite_loader.load("mage-idle1.png");
     mage_sprite.set_position(200.0, 200.0);
-
     let mage_id = scene.add_child(mage_sprite);
 
 
