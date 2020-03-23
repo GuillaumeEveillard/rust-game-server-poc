@@ -18,6 +18,22 @@ use uuid::Uuid;
 use gfx_device_gl::{CommandBuffer, Resources};
 use std::path::PathBuf;
 
+struct Position { x: u32, y: u32}
+
+struct GLivingBeing {
+    name: String,
+    position: Position,
+    health : u32,
+    sprite_id: Uuid
+}
+
+impl GLivingBeing {
+    fn render(&self, window: &mut PistonWindow, scene: &mut Scene<Texture<Resources>>) {
+        let sprite = scene.child_mut(self.sprite_id).unwrap();
+        sprite.set_position(self.position.x as f64, self.position.y as f64);
+    }
+}
+
 struct SpriteLoader {
     texture_context: TextureContext<gfx_device_gl::Factory, Resources, CommandBuffer>,
     assets: PathBuf
@@ -90,6 +106,10 @@ fn main() {
                              Box::new(RotateTo(2.0, 360.0))));
     scene.run(id, &rotate);
 
+    //let red = [1.0, 0.0, 0.0, 1.0];
+    //Rectangle::new(red).dr
+
+  
     println!("Press any key to pause/resume the animation!");
 
     while let Some(e) = window.next() {
@@ -98,6 +118,12 @@ fn main() {
         window.draw_2d(&e, |c, g, _| {
             clear([1.0, 1.0, 1.0, 1.0], g);
             scene.draw(c.transform, g);
+
+            let red = [1.0, 0.0, 0.0, 1.0];
+            let black = [0.0, 0.0, 0.0, 1.0];
+            let rect = math::margin_rectangle([20.0, 20.0, 100.0, 10.0], 1.0);
+            rectangle(red, rect, c.transform, g);
+            Rectangle::new_border(black, 2.0).draw(rect, &c.draw_state, c.transform, g);
         });
 
         if let Some(Button::Keyboard(Key::D)) = e.press_args() {
