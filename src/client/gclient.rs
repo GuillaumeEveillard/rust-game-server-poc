@@ -20,17 +20,66 @@ use std::path::PathBuf;
 
 struct Position { x: u32, y: u32}
 
+impl Position {
+    pub fn new(x: u32, y: u32) -> Self {
+        Position { x, y }
+    }
+}
+
+struct Size {w: u32, h: u32}
+
+impl Size {
+    pub fn new(w: u32, h: u32) -> Self {
+        Size { w, h }
+    }
+    pub fn apply_scale(&self, scale: f64) -> Size {
+        Size {w: (self.w as f64 * scale) as u32, h: (self.h as f64* scale) as u32}
+    }
+}
+
 struct GLivingBeing {
     name: String,
     position: Position,
+    scale: f64,
+    actual_size: Size,
     health : u32,
     sprite_id: Uuid
 }
 
+struct SpriteDef {
+    path: String,
+    size: Size
+}
+
+impl SpriteDef {
+    pub fn new(path: String, size: Size) -> Self {
+        SpriteDef { path, size }
+    }
+}
+
 impl GLivingBeing {
-    fn render(&self, window: &mut PistonWindow, scene: &mut Scene<Texture<Resources>>) {
+    const GREEN: [f32; 4] =  [0.0, 1.0, 0.0, 1.0];
+    const YELLOW: [f32; 4] = [1.0, 1.0, 0.0, 1.0];
+    const RED: [f32; 4] = [1.0, 0.0, 0.0, 1.0];
+    const BLACK: [f32; 4] =  [0.0, 0.0, 0.0, 1.0];
+    
+    fn new(    name: String,
+               sprite_def: SpriteDef,
+               position: Position,
+               scale: f64,
+               health : u32,
+               sprite_id: Uuid) -> GLivingBeing {
+        GLivingBeing {name, position, scale, actual_size: sprite_def.size.apply_scale(scale),health, sprite_id}
+    }
+    
+    fn render(&self, scene: &mut Scene<Texture<Resources>>, c: &Context, g: &mut G2d) {
         let sprite = scene.child_mut(self.sprite_id).unwrap();
         sprite.set_position(self.position.x as f64, self.position.y as f64);
+        sprite.set_scale(self.scale, self.scale);
+        
+        let rect = math::margin_rectangle([self.position.x as f64, self.position.y as f64, 100.0, 10.0], 1.0);
+        rectangle(GLivingBeing::RED, rect, c.transform, g);
+        Rectangle::new_border(GLivingBeing::BLACK, 2.0).draw(rect, &c.draw_state, c.transform, g);
     }
 }
 
@@ -73,6 +122,12 @@ fn main() {
     let mut scene = Scene::new();
     
     let mut sprite_loader = SpriteLoader::new(&mut window);
+
+    let golem_sprite_def = SpriteDef::new("Golem_01_Idle_000.png".to_string(), Size::new(720,480));
+
+    let mut golem_sprite = sprite_loader.load(&golem_sprite_def.path);
+    let golem_id = scene.add_child(golem_sprite);
+    let golem = GLivingBeing::new("Golem du chaos".to_string(),golem_sprite_def, Position::new(400, 500), 0.5, 100, golem_id);
     
     // Rust sprite
     let mut sprite = sprite_loader.load("rust.png");
@@ -113,9 +168,12 @@ fn main() {
     println!("Press any key to pause/resume the animation!");
 
     while let Some(e) = window.next() {
+        
+        
+        
         scene.event(&e);
 
-        window.draw_2d(&e, |c, g, _| {
+        window.draw_2d(&e, |c, mut g, _| {
             clear([1.0, 1.0, 1.0, 1.0], g);
             scene.draw(c.transform, g);
 
@@ -124,6 +182,8 @@ fn main() {
             let rect = math::margin_rectangle([20.0, 20.0, 100.0, 10.0], 1.0);
             rectangle(red, rect, c.transform, g);
             Rectangle::new_border(black, 2.0).draw(rect, &c.draw_state, c.transform, g);
+
+            golem.render(&mut scene, &c, &mut g);
         });
 
         if let Some(Button::Keyboard(Key::D)) = e.press_args() {
