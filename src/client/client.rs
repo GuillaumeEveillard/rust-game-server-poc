@@ -7,6 +7,7 @@ use tonic::transport::{Channel, Endpoint};
 
 use game_master::Action;
 use game_master::game_master_client::GameMasterClient;
+use game_master::{LivingBeing};
 use game_master::GameStateRequest;
 use game_master::action::Spell;
 use tokio::sync::Mutex;
@@ -17,7 +18,8 @@ pub mod game_master {
 }
 
 pub struct GameClient {
-    game_master_client: Arc<Mutex<GameMasterClient<Channel>>>,
+    game_master_client: Mutex<GameMasterClient<Channel>>,
+    living_beings: Mutex<Vec<LivingBeing>>
 }
 
 impl GameClient {
@@ -26,8 +28,8 @@ impl GameClient {
             .connect()
             .await?;
 
-        let greeter_client = Arc::new(Mutex::new(GameMasterClient::new(channel.clone())));
-        Ok(GameClient{ game_master_client: greeter_client})
+        let greeter_client = Mutex::new(GameMasterClient::new(channel.clone()));
+        Ok(GameClient{ game_master_client: greeter_client, living_beings: Mutex::new(Vec::new())})
     }
 
     pub async fn send_action(&self, spell: Spell) {
@@ -51,8 +53,13 @@ impl GameClient {
 
         let mut inbound = response.into_inner();
 
-        while let Some(note) = inbound.message().await.unwrap() {
+        while let Some(ref mut note) = inbound.message().await.unwrap() {
+            println!("counter = {:?}", note.counter);
             println!("NOTE = {:?}", note);
+            let mut guard = self.living_beings.lock().await;
+            guard.clear();
+            guard.append(&mut note.living_beings);
+            std::mem::drop(guard);
         }
     }
 }
