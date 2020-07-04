@@ -3,6 +3,8 @@ extern crate ai_behavior;
 extern crate sprite;
 extern crate find_folder;
 
+mod client;
+
 use std::rc::Rc;
 
 use piston_window::*;
@@ -15,8 +17,12 @@ use ai_behavior::{
     While,
 };
 use uuid::Uuid;
+use std::sync::Arc;
 use gfx_device_gl::{CommandBuffer, Resources};
 use std::path::PathBuf;
+use client::GameClient;
+use client::game_master::action::Spell;
+use tokio::sync::Mutex;
 
 struct Position { x: u32, y: u32}
 
@@ -110,7 +116,16 @@ impl SpriteLoader {
     }
 }
 
-fn main() {
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+
+    let game_client = Arc::new(GameClient::new().await?);
+
+    let game_client_cloned = Arc::clone(&game_client);
+    tokio::spawn(async move {
+        game_client_cloned.subscribe_to_game_state_update().await;
+    });
+
     let (width, height) = (1024, 768);
     let opengl = OpenGL::V3_2;
     let mut window: PistonWindow =
@@ -199,11 +214,35 @@ fn main() {
             move_object(&mut scene, mage_id, 0.0, 10.0)
         }
 
+        if let Some(Button::Keyboard(Key::D1)) = e.press_args() {
+            game_client.send_action(Spell::Fireball).await;
+        }
+        if let Some(Button::Keyboard(Key::D2)) = e.press_args() {
+            game_client.send_action(Spell::FrostBall).await;
+        }
+
+
+
+        // Some(Input::Character(c)) => {
+        //     match c {
+        //         '&' | '1' => {
+        //             window.addstr("Fireball");
+        //            
+        //         }
+        //         'é' | '2' => {
+        //             window.addstr("Frostball");
+        //             game_client.send_action(Spell::FrostBall).await;
+        //         }
+        //         _ => {}
+        //     }
+
         if let Some(_) = e.press_args() {
             scene.toggle(id, &seq);
             scene.toggle(id, &rotate);
         }
     }
+
+    Ok(())
 }
 
 fn move_object<T: piston_window::ImageSize>(scene : &mut Scene<T>, object_id: Uuid, delta_x: f64, delta_y: f64) {

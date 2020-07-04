@@ -9,38 +9,45 @@ use game_master::Action;
 use game_master::game_master_client::GameMasterClient;
 use game_master::GameStateRequest;
 use game_master::action::Spell;
+use tokio::sync::Mutex;
+use std::sync::Arc;
 
 pub mod game_master {
     tonic::include_proto!("gamemaster");
 }
 
-struct GameClient {
-    game_master_client: GameMasterClient<Channel>,
+pub struct GameClient {
+    game_master_client: Arc<Mutex<GameMasterClient<Channel>>>,
 }
 
 impl GameClient {
-    async fn new() -> Result<GameClient, Box<dyn Error>> {
+    pub async fn new() -> Result<GameClient, Box<dyn Error>> {
         let channel = Endpoint::from_static("http://[::1]:50051")
             .connect()
             .await?;
 
-        let greeter_client = GameMasterClient::new(channel.clone());
+        let greeter_client = Arc::new(Mutex::new(GameMasterClient::new(channel.clone())));
         Ok(GameClient{ game_master_client: greeter_client})
     }
 
-    async fn send_action(&mut self, spell: Spell) {
+    pub async fn send_action(&self, spell: Spell) {
         let request = tonic::Request::new(Action {
             spell: spell as i32,
         });
 
-        let response = self.game_master_client.send_action(request).await.unwrap();
+        let mut guard = self.game_master_client.lock().await;
+        let response = guard.send_action(request).await.unwrap();
+        std::mem::drop(guard);
 
         println!("RESPONSE={:?}", response);
     }
 
-    async fn subscribe_to_game_state_update(&mut self) {
+    pub async fn subscribe_to_game_state_update(&self) {
         let request = GameStateRequest{message: "Hello echo".to_string()};
-        let response = self.game_master_client.game_state_streaming(request).await.unwrap();
+        
+        let mut guard = self.game_master_client.lock().await;
+        let response = guard.game_state_streaming(request).await.unwrap();
+        std::mem::drop(guard);
 
         let mut inbound = response.into_inner();
 
