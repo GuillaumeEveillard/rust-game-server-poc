@@ -3,7 +3,7 @@ use tokio::sync::Mutex;
 use tokio::sync::mpsc;
 use tonic::{Request, Response, Status, transport::Server};
 
-use game_master::{Action, ActionResult, GameStateRequest, GameStateResponse, LivingBeing};
+use game_master::{Action, ActionResult, GameStateRequest, GameStateResponse, LivingBeing, Position};
 use game_master::game_master_server::{GameMaster, GameMasterServer};
 use std::time::{Instant, Duration};
 
@@ -19,7 +19,7 @@ struct StateManager {
 impl StateManager {
     fn new() -> StateManager {
         let mut living_beings = Vec::new();
-        living_beings.push(LivingBeing{id: 1, name: "Murloc du chaos".to_string(), health: 100});
+        living_beings.push(LivingBeing{id: 1, name: "Murloc du chaos".to_string(), health: 100, position: Some(Position{x: 50, y: 50})});
         StateManager{counter: 0, living_beings}
     }
     
@@ -41,6 +41,11 @@ impl GameServer {
 impl LivingBeing {
     fn update_health(&mut self, diff: i32) {
         self.health = std::cmp::max(0, self.health as i32 + diff) as u32; //il y a un risque d'overflow ici  
+    }
+    
+    fn move_it(&mut self, x_diff: i32, y_diff: i32) {
+        let old_position = self.position.as_ref().unwrap();
+        self.position = Some(Position{x: (old_position.x as i32 + x_diff) as u32,y: (old_position.y as i32 + y_diff) as u32});
     }
 }
 
@@ -92,7 +97,10 @@ impl GameMaster for GameServer {
             for i in start..20 {
                 interval.tick().await;
 
-                let state = sm.lock().await;
+                let mut state = sm.lock().await;
+                for lb in &mut state.living_beings {
+                    lb.move_it(10, 10);
+                }
                 let to_send = GameStateResponse{counter: i, living_beings: state.living_beings.clone()};
                 let result: Result<GameStateResponse, Status> = Ok(to_send);
                 tx.send(result).await.unwrap();

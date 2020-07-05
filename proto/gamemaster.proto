@@ -32,4 +32,10 @@ message LivingBeing {
   uint64 id = 1;
   string name = 2;
   uint32 health = 3;
+  Position position = 4;
+}
+
+message Position { 
+  uint32 x = 1;
+  uint32 y = 2;
 }

@@ -5,7 +5,12 @@ extern crate find_folder;
 
 mod client;
 
+pub mod game_master {
+    tonic::include_proto!("gamemaster");
+}
+
 use std::rc::Rc;
+use std::collections::HashSet;
 
 use piston_window::*;
 use sprite::*;
@@ -23,6 +28,7 @@ use std::path::PathBuf;
 use client::GameClient;
 use client::game_master::action::Spell;
 use tokio::sync::Mutex;
+use client::game_master::{LivingBeing};
 
 struct Position { x: u32, y: u32}
 
@@ -138,11 +144,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     
     let mut sprite_loader = SpriteLoader::new(&mut window);
 
-    let golem_sprite_def = SpriteDef::new("Golem_01_Idle_000.png".to_string(), Size::new(720,480));
-
-    let mut golem_sprite = sprite_loader.load(&golem_sprite_def.path);
-    let golem_id = scene.add_child(golem_sprite);
-    let golem = GLivingBeing::new("Golem du chaos".to_string(),golem_sprite_def, Position::new(400, 500), 0.5, 100, golem_id);
+   
+    // let golem = GLivingBeing::new("Golem du chaos".to_string(),golem_sprite_def, Position::new(400, 500), 0.5, 100, golem_id);
     
     // Rust sprite
     let mut sprite = sprite_loader.load("rust.png");
@@ -182,9 +185,32 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
   
     println!("Press any key to pause/resume the animation!");
 
+    let mut living_being_ids = HashSet::new();
+    let mut g_living_begins: Vec<GLivingBeing> = Vec::new();
+    let mut new_g_living_begins = Vec::new();
+
     while let Some(e) = window.next() {
         
         
+        
+        let guard = game_client.get_living_beings().lock().await;
+
+
+        let filter : Vec<&LivingBeing> = guard.iter().filter(|lb| !living_being_ids.contains(&lb.id)).collect::<Vec<&LivingBeing>>();
+        for new_lb in filter {
+            let golem_sprite_def = SpriteDef::new("Golem_01_Idle_000.png".to_string(), Size::new(720,480));
+            let mut golem_sprite = sprite_loader.load(&golem_sprite_def.path);
+            let golem_id = scene.add_child(golem_sprite);
+            new_g_living_begins.push(GLivingBeing::new(
+                new_lb.name.clone(), 
+                golem_sprite_def, 
+                Position { x: new_lb.position.as_ref().unwrap().x, y: new_lb.position.as_ref().unwrap().y }, 
+                0.25, 
+                new_lb.health, 
+                golem_id));
+            living_being_ids.insert(new_lb.id);
+        }
+        std::mem::drop(guard);
         
         scene.event(&e);
 
@@ -198,7 +224,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             rectangle(red, rect, c.transform, g);
             Rectangle::new_border(black, 2.0).draw(rect, &c.draw_state, c.transform, g);
 
-            golem.render(&mut scene, &c, &mut g);
+            for glb in &new_g_living_begins {
+                glb.render(&mut scene, &c, &mut g);
+            }
+
+            for lb in &g_living_begins {
+                let obj = scene.child_mut(lb.sprite_id).unwrap();
+                obj.set_position(lb.position.x as f64, lb.position.y as f64);
+            }
+
+            g_living_begins.append(&mut new_g_living_begins);
         });
 
         if let Some(Button::Keyboard(Key::D)) = e.press_args() {

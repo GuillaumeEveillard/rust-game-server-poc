@@ -62,6 +62,10 @@ impl GameClient {
             std::mem::drop(guard);
         }
     }
+    
+    pub fn get_living_beings(&self) -> &Mutex<Vec<LivingBeing>> {
+        return &self.living_beings;
+    }
 }
 
 #[tokio::main]
