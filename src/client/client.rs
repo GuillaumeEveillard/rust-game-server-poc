@@ -2,16 +2,16 @@ extern crate pancurses;
 
 use std::error::Error;
 
-use pancurses::{endwin, initscr, Input, noecho};
+use pancurses::{endwin, initscr, noecho, Input};
 use tonic::transport::{Channel, Endpoint};
 
-use game_master::Action;
-use game_master::game_master_client::GameMasterClient;
-use game_master::{LivingBeing};
-use game_master::GameStateRequest;
 use game_master::action::Spell;
-use tokio::sync::Mutex;
+use game_master::game_master_client::GameMasterClient;
+use game_master::Action;
+use game_master::GameStateRequest;
+use game_master::LivingBeing;
 use std::sync::Arc;
+use tokio::sync::Mutex;
 
 pub mod game_master {
     tonic::include_proto!("gamemaster");
@@ -19,7 +19,7 @@ pub mod game_master {
 
 pub struct GameClient {
     game_master_client: Mutex<GameMasterClient<Channel>>,
-    living_beings: Mutex<Vec<LivingBeing>>
+    living_beings: Mutex<Vec<LivingBeing>>,
 }
 
 impl GameClient {
@@ -29,7 +29,10 @@ impl GameClient {
             .await?;
 
         let greeter_client = Mutex::new(GameMasterClient::new(channel.clone()));
-        Ok(GameClient{ game_master_client: greeter_client, living_beings: Mutex::new(Vec::new())})
+        Ok(GameClient {
+            game_master_client: greeter_client,
+            living_beings: Mutex::new(Vec::new()),
+        })
     }
 
     pub async fn send_action(&self, spell: Spell) {
@@ -45,8 +48,10 @@ impl GameClient {
     }
 
     pub async fn subscribe_to_game_state_update(&self) {
-        let request = GameStateRequest{message: "Hello echo".to_string()};
-        
+        let request = GameStateRequest {
+            message: "Hello echo".to_string(),
+        };
+
         let mut guard = self.game_master_client.lock().await;
         let response = guard.game_state_streaming(request).await.unwrap();
         std::mem::drop(guard);
@@ -62,7 +67,7 @@ impl GameClient {
             std::mem::drop(guard);
         }
     }
-    
+
     pub fn get_living_beings(&self) -> &Mutex<Vec<LivingBeing>> {
         return &self.living_beings;
     }
@@ -72,7 +77,7 @@ impl GameClient {
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut game_client = GameClient::new().await?;
 
-    game_client.subscribe_to_game_state_update().await;    
+    game_client.subscribe_to_game_state_update().await;
     let window = initscr();
     window.printw("Type things, press delete to quit\n");
     window.refresh();
@@ -80,28 +85,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     noecho();
     loop {
         match window.getch() {
-            Some(Input::Character(c)) => { 
-                match c {
-                    '&' | '1' => {
-                        window.addstr("Fireball");
-                        game_client.send_action(Spell::Fireball).await;
-                    }
-                    'é' | '2' => {
-                        window.addstr("Frostball");
-                        game_client.send_action(Spell::FrostBall).await;
-                    }
-                    _ => {}
+            Some(Input::Character(c)) => match c {
+                '&' | '1' => {
+                    window.addstr("Fireball");
+                    game_client.send_action(Spell::Fireball).await;
                 }
+                'é' | '2' => {
+                    window.addstr("Frostball");
+                    game_client.send_action(Spell::FrostBall).await;
+                }
+                _ => {}
             },
             Some(Input::KeyDC) => break,
-            Some(input) => { window.addstr(&format!("{:?}", input)); },
-            None => ()
+            Some(input) => {
+                window.addstr(&format!("{:?}", input));
+            }
+            None => (),
         }
     }
     endwin();
 
-
     game_client.subscribe_to_game_state_update().await;
-    
+
     Ok(())
 }
