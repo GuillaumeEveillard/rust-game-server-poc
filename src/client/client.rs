@@ -23,9 +23,7 @@ pub struct GameClient {
 
 impl GameClient {
     pub async fn new() -> Result<GameClient, Box<dyn Error>> {
-        let channel = Endpoint::from_static("http://[::1]:50051")
-            .connect()
-            .await?;
+        let channel = Endpoint::from_static("http://[::1]:50051").connect().await?;
 
         let greeter_client = Mutex::new(GameMasterClient::new(channel.clone()));
         Ok(GameClient {
@@ -35,9 +33,7 @@ impl GameClient {
     }
 
     pub async fn send_action(&self, spell: Spell) {
-        let request = tonic::Request::new(Action {
-            spell: spell as i32,
-        });
+        let request = tonic::Request::new(Action { spell: spell as i32 });
 
         let mut guard = self.game_master_client.lock().await;
         let response = guard.send_action(request).await.unwrap();

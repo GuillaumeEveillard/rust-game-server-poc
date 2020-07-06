@@ -7,7 +7,8 @@ use tonic::{transport::Server, Request, Response, Status};
 
 use game_master::game_master_server::{GameMaster, GameMasterServer};
 use game_master::{
-    Action, ActionResult, GameStateRequest, GameStateResponse, LivingBeing, Position,
+    Action, ActionResult, GameStateRequest, GameStateResponse, LivingBeing, NewPlayerRequest, NewPlayerResponse,
+    Position,
 };
 
 pub mod game_master {
@@ -15,7 +16,9 @@ pub mod game_master {
 }
 
 struct StateManager {
+    next_id: u64,
     counter: u32,
+    players: Vec<LivingBeing>,
     living_beings: Vec<LivingBeing>,
 }
 
@@ -29,7 +32,9 @@ impl StateManager {
             position: Some(Position { x: 50, y: 50 }),
         });
         StateManager {
+            next_id: 2,
             counter: 0,
+            players: Vec::new(),
             living_beings,
         }
     }
@@ -65,10 +70,24 @@ impl LivingBeing {
 
 #[tonic::async_trait]
 impl GameMaster for GameServer {
-    async fn send_action(
-        &self,
-        request: Request<Action>,
-    ) -> Result<Response<ActionResult>, Status> {
+    async fn new_player(&self, request: Request<NewPlayerRequest>) -> Result<Response<NewPlayerResponse>, Status> {
+        let mut guard = self.state_manager.lock().await;
+        let id = guard.next_id;
+        guard.next_id += 1;
+        guard.players.push(LivingBeing {
+            id,
+            name: request.get_ref().player_name.to_string(),
+            health: 100,
+            position: Some(Position {
+                x: (id * 50) as u32,
+                y: 50,
+            }),
+        });
+
+        Ok(Response::new(NewPlayerResponse { id: 1 }))
+    }
+
+    async fn send_action(&self, request: Request<Action>) -> Result<Response<ActionResult>, Status> {
         println!("Got a request from {:?}", request.remote_addr());
 
         let action = request.get_ref();
@@ -109,8 +128,7 @@ impl GameMaster for GameServer {
         let sm = self.state_manager.clone();
 
         tokio::spawn(async move {
-            let mut interval =
-                tokio::time::interval_at(tokio::time::Instant::now(), Duration::from_secs(5));
+            let mut interval = tokio::time::interval_at(tokio::time::Instant::now(), Duration::from_secs(5));
 
             let start: u64 = 0;
             for i in start..20 {
