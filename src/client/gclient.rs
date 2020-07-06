@@ -3,27 +3,26 @@ extern crate find_folder;
 extern crate piston_window;
 extern crate sprite;
 
+use std::collections::HashMap;
+use std::path::PathBuf;
+use std::rc::Rc;
+use std::sync::Arc;
+
+use ai_behavior::{Action, Behavior, Sequence, Wait, WaitForever, While};
+use gfx_device_gl::{CommandBuffer, Resources};
+use piston_window::*;
+use sprite::*;
+use uuid::Uuid;
+
+use client::game_master::action::Spell;
+use client::game_master::LivingBeing;
+use client::GameClient;
+
 mod client;
 
 pub mod game_master {
     tonic::include_proto!("gamemaster");
 }
-
-use std::collections::HashMap;
-use std::collections::HashSet;
-use std::rc::Rc;
-
-use ai_behavior::{Action, Sequence, Wait, WaitForever, While};
-use client::game_master::action::Spell;
-use client::game_master::LivingBeing;
-use client::GameClient;
-use gfx_device_gl::{CommandBuffer, Resources};
-use piston_window::*;
-use sprite::*;
-use std::path::PathBuf;
-use std::sync::Arc;
-use tokio::sync::Mutex;
-use uuid::Uuid;
 
 struct Position {
     x: u32,
@@ -172,55 +171,12 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mut sprite = sprite_loader.load("rust.png");
     sprite.set_position(width as f64 / 2.0, height as f64 / 2.0);
     let id = scene.add_child(sprite);
+    let (rust_logo_seq, rust_logo_rotate) = rust_sprint(&mut scene, id);
 
     // Mage sprite
     let mut mage_sprite = sprite_loader.load("mage-idle1.png");
     mage_sprite.set_position(200.0, 200.0);
     let mage_id = scene.add_child(mage_sprite);
-
-    // Run a sequence of animations.
-    let seq = Sequence(vec![
-        Action(Ease(
-            EaseFunction::CubicOut,
-            Box::new(ScaleTo(2.0, 0.5, 0.5)),
-        )),
-        Action(Ease(
-            EaseFunction::BounceOut,
-            Box::new(MoveBy(1.0, 0.0, 100.0)),
-        )),
-        Action(Ease(
-            EaseFunction::ElasticOut,
-            Box::new(MoveBy(2.0, 0.0, -100.0)),
-        )),
-        Action(Ease(
-            EaseFunction::BackInOut,
-            Box::new(MoveBy(1.0, 0.0, -100.0)),
-        )),
-        Wait(0.5),
-        Action(Ease(
-            EaseFunction::ExponentialInOut,
-            Box::new(MoveBy(1.0, 0.0, 100.0)),
-        )),
-        Action(Blink(1.0, 5)),
-        While(
-            Box::new(WaitForever),
-            vec![
-                Action(Ease(EaseFunction::QuadraticIn, Box::new(FadeOut(1.0)))),
-                Action(Ease(EaseFunction::QuadraticOut, Box::new(FadeIn(1.0)))),
-            ],
-        ),
-    ]);
-    scene.run(id, &seq);
-
-    // This animation and the one above can run in parallel.
-    let rotate = Action(Ease(
-        EaseFunction::ExponentialInOut,
-        Box::new(RotateTo(2.0, 360.0)),
-    ));
-    scene.run(id, &rotate);
-
-    //let red = [1.0, 0.0, 0.0, 1.0];
-    //Rectangle::new(red).dr
 
     println!("Press any key to pause/resume the animation!");
 
@@ -323,27 +279,61 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             game_client.send_action(Spell::FrostBall).await;
         }
 
-        // Some(Input::Character(c)) => {
-        //     match c {
-        //         '&' | '1' => {
-        //             window.addstr("Fireball");
-        //
-        //         }
-        //         'é' | '2' => {
-        //             window.addstr("Frostball");
-        //             game_client.send_action(Spell::FrostBall).await;
-        //         }
-        //         _ => {}
-        //     }
-
-        if let Some(_) = e.press_args() {
-            scene.toggle(id, &seq);
-            scene.toggle(id, &rotate);
+        if let Some(Button::Keyboard(Key::P)) = e.press_args() {
+            scene.toggle(id, &rust_logo_seq);
+            scene.toggle(id, &rust_logo_rotate);
         }
         c += 1;
     }
 
     Ok(())
+}
+
+fn rust_sprint(
+    scene: &mut Scene<Texture<Resources>>,
+    id: Uuid,
+) -> (Behavior<Animation>, Behavior<Animation>) {
+    // Run a sequence of animations.
+    let seq = Sequence(vec![
+        Action(Ease(
+            EaseFunction::CubicOut,
+            Box::new(ScaleTo(2.0, 0.5, 0.5)),
+        )),
+        Action(Ease(
+            EaseFunction::BounceOut,
+            Box::new(MoveBy(1.0, 0.0, 100.0)),
+        )),
+        Action(Ease(
+            EaseFunction::ElasticOut,
+            Box::new(MoveBy(2.0, 0.0, -100.0)),
+        )),
+        Action(Ease(
+            EaseFunction::BackInOut,
+            Box::new(MoveBy(1.0, 0.0, -100.0)),
+        )),
+        Wait(0.5),
+        Action(Ease(
+            EaseFunction::ExponentialInOut,
+            Box::new(MoveBy(1.0, 0.0, 100.0)),
+        )),
+        Action(Blink(1.0, 5)),
+        While(
+            Box::new(WaitForever),
+            vec![
+                Action(Ease(EaseFunction::QuadraticIn, Box::new(FadeOut(1.0)))),
+                Action(Ease(EaseFunction::QuadraticOut, Box::new(FadeIn(1.0)))),
+            ],
+        ),
+    ]);
+    scene.run(id, &seq);
+
+    // This animation and the one above can run in parallel.
+    let rotate = Action(Ease(
+        EaseFunction::ExponentialInOut,
+        Box::new(RotateTo(2.0, 360.0)),
+    ));
+    scene.run(id, &rotate);
+    (seq, rotate)
 }
 
 fn move_object<T: piston_window::ImageSize>(

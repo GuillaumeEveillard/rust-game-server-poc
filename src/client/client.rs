@@ -10,7 +10,6 @@ use game_master::game_master_client::GameMasterClient;
 use game_master::Action;
 use game_master::GameStateRequest;
 use game_master::LivingBeing;
-use std::sync::Arc;
 use tokio::sync::Mutex;
 
 pub mod game_master {
@@ -69,13 +68,13 @@ impl GameClient {
     }
 
     pub fn get_living_beings(&self) -> &Mutex<Vec<LivingBeing>> {
-        return &self.living_beings;
+        &self.living_beings
     }
 }
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut game_client = GameClient::new().await?;
+    let game_client = GameClient::new().await?;
 
     game_client.subscribe_to_game_state_update().await;
     let window = initscr();

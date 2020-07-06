@@ -1,4 +1,6 @@
 use std::sync::Arc;
+use std::time::Duration;
+
 use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 use tonic::{transport::Server, Request, Response, Status};
@@ -7,7 +9,6 @@ use game_master::game_master_server::{GameMaster, GameMasterServer};
 use game_master::{
     Action, ActionResult, GameStateRequest, GameStateResponse, LivingBeing, Position,
 };
-use std::time::{Duration, Instant};
 
 pub mod game_master {
     tonic::include_proto!("gamemaster");
@@ -34,7 +35,7 @@ impl StateManager {
     }
 
     fn inc(&mut self) {
-        self.counter = self.counter + 1;
+        self.counter += 1;
     }
 }
 
@@ -88,7 +89,6 @@ impl GameMaster for GameServer {
             }
         }
 
-        // let mut state = lock.unwrap();
         state.inc();
         let c = state.counter;
 
