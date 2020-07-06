@@ -17,6 +17,7 @@ use uuid::Uuid;
 use client::game_master::action::Spell;
 use client::game_master::LivingBeing;
 use client::GameClient;
+use std::collections::hash_map::Entry;
 
 mod client;
 
@@ -186,30 +187,33 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
         let guard = game_client.get_living_beings().lock().await;
         for new_lb in guard.iter() {
-            if g_living_begins.contains_key(&new_lb.id) {
-                println!("Updating {} ", new_lb.id);
-                g_living_begins.get_mut(&new_lb.id).unwrap().position = Position {
-                    x: new_lb.position.as_ref().unwrap().x,
-                    y: new_lb.position.as_ref().unwrap().y,
-                };
-            } else {
-                println!("Creating {} ", new_lb.id);
-                let golem_sprite_def = SpriteDef::new("Golem_01_Idle_000.png".to_string(), Size::new(720, 480));
-                let mut golem_sprite = sprite_loader.load(&golem_sprite_def.path);
-                let golem_id = scene.add_child(golem_sprite);
-                let glb = GLivingBeing::new(
-                    new_lb.name.clone(),
-                    golem_sprite_def,
-                    Position {
+            match g_living_begins.entry(new_lb.id) {
+                Entry::Occupied(mut e) => {
+                    println!("Updating {} ", new_lb.id);
+                    e.get_mut().position = Position {
                         x: new_lb.position.as_ref().unwrap().x,
                         y: new_lb.position.as_ref().unwrap().y,
-                    },
-                    0.25,
-                    new_lb.health,
-                    golem_id,
-                    false,
-                );
-                g_living_begins.insert(new_lb.id, glb);
+                    };
+                }
+                Entry::Vacant(mut e) => {
+                    println!("Creating {} ", new_lb.id);
+                    let golem_sprite_def = SpriteDef::new("Golem_01_Idle_000.png".to_string(), Size::new(720, 480));
+                    let mut golem_sprite = sprite_loader.load(&golem_sprite_def.path);
+                    let golem_id = scene.add_child(golem_sprite);
+                    let glb = GLivingBeing::new(
+                        new_lb.name.clone(),
+                        golem_sprite_def,
+                        Position {
+                            x: new_lb.position.as_ref().unwrap().x,
+                            y: new_lb.position.as_ref().unwrap().y,
+                        },
+                        0.25,
+                        new_lb.health,
+                        golem_id,
+                        false,
+                    );
+                    e.insert(glb);
+                }
             }
         }
 
