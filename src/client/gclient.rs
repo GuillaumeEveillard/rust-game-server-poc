@@ -59,6 +59,7 @@ struct GLivingBeing {
     actual_size: Size,
     health: u32,
     sprite_id: Uuid,
+    has_been_rendered: bool,
 }
 
 struct SpriteDef {
@@ -85,6 +86,7 @@ impl GLivingBeing {
         scale: f64,
         health: u32,
         sprite_id: Uuid,
+        has_been_rendered: bool,
     ) -> GLivingBeing {
         GLivingBeing {
             name,
@@ -93,6 +95,7 @@ impl GLivingBeing {
             actual_size: sprite_def.size.apply_scale(scale),
             health,
             sprite_id,
+            has_been_rendered,
         }
     }
 
@@ -101,10 +104,7 @@ impl GLivingBeing {
         sprite.set_position(self.position.x as f64, self.position.y as f64);
         sprite.set_scale(self.scale, self.scale);
 
-        let rect = math::margin_rectangle(
-            [self.position.x as f64, self.position.y as f64, 100.0, 10.0],
-            1.0,
-        );
+        let rect = math::margin_rectangle([self.position.x as f64, self.position.y as f64, 100.0, 10.0], 1.0);
         rectangle(GLivingBeing::RED, rect, c.transform, g);
         Rectangle::new_border(GLivingBeing::BLACK, 2.0).draw(rect, &c.draw_state, c.transform, g);
     }
@@ -121,9 +121,7 @@ impl SpriteLoader {
             factory: window.factory.clone(),
             encoder: window.factory.create_command_buffer().into(),
         };
-        let assets = find_folder::Search::ParentsThenKids(3, 3)
-            .for_folder("assets")
-            .unwrap();
+        let assets = find_folder::Search::ParentsThenKids(3, 3).for_folder("assets").unwrap();
         SpriteLoader {
             texture_context,
             assets,
@@ -181,33 +179,25 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     println!("Press any key to pause/resume the animation!");
 
     let mut g_living_begins: HashMap<u64, GLivingBeing> = HashMap::new();
-    let mut new_g_living_begins: HashMap<u64, GLivingBeing> = HashMap::new();
 
     let mut c = 0;
     while let Some(e) = window.next() {
         println!("Counter {}", c);
 
         let guard = game_client.get_living_beings().lock().await;
-
-        let new_from_server: Vec<&LivingBeing> = guard
-            .iter()
-            .filter(|lb| {
-                g_living_begins.get(&lb.id).is_none() && new_g_living_begins.get(&lb.id).is_none()
-            })
-            .collect::<Vec<&LivingBeing>>();
-        let update_from_server: Vec<&LivingBeing> = guard
-            .iter()
-            .filter(|lb| g_living_begins.get(&lb.id).is_some())
-            .collect::<Vec<&LivingBeing>>();
-        for new_lb in new_from_server {
-            println!("Creating {} ", new_lb.id);
-            let golem_sprite_def =
-                SpriteDef::new("Golem_01_Idle_000.png".to_string(), Size::new(720, 480));
-            let mut golem_sprite = sprite_loader.load(&golem_sprite_def.path);
-            let golem_id = scene.add_child(golem_sprite);
-            new_g_living_begins.insert(
-                new_lb.id,
-                GLivingBeing::new(
+        for new_lb in guard.iter() {
+            if g_living_begins.contains_key(&new_lb.id) {
+                println!("Updating {} ", new_lb.id);
+                g_living_begins.get_mut(&new_lb.id).unwrap().position = Position {
+                    x: new_lb.position.as_ref().unwrap().x,
+                    y: new_lb.position.as_ref().unwrap().y,
+                };
+            } else {
+                println!("Creating {} ", new_lb.id);
+                let golem_sprite_def = SpriteDef::new("Golem_01_Idle_000.png".to_string(), Size::new(720, 480));
+                let mut golem_sprite = sprite_loader.load(&golem_sprite_def.path);
+                let golem_id = scene.add_child(golem_sprite);
+                let glb = GLivingBeing::new(
                     new_lb.name.clone(),
                     golem_sprite_def,
                     Position {
@@ -217,16 +207,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                     0.25,
                     new_lb.health,
                     golem_id,
-                ),
-            );
-        }
-
-        for updated_lb in update_from_server {
-            println!("Updating {} ", updated_lb.id);
-            g_living_begins.get_mut(&updated_lb.id).unwrap().position = Position {
-                x: updated_lb.position.as_ref().unwrap().x,
-                y: updated_lb.position.as_ref().unwrap().y,
-            };
+                    false,
+                );
+                g_living_begins.insert(new_lb.id, glb);
+            }
         }
 
         std::mem::drop(guard);
@@ -243,19 +227,13 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             rectangle(red, rect, c.transform, g);
             Rectangle::new_border(black, 2.0).draw(rect, &c.draw_state, c.transform, g);
 
-            for (_, glb) in &new_g_living_begins {
-                glb.render(&mut scene, &c, &mut g);
-            }
-
-            for (_, lb) in &g_living_begins {
-                let obj = scene.child_mut(lb.sprite_id).unwrap();
-                obj.set_position(lb.position.x as f64, lb.position.y as f64);
-            }
-
-            println!("Size: {}", new_g_living_begins.len());
-            for (k, v) in new_g_living_begins.drain() {
-                println!("Insert {}", k);
-                g_living_begins.insert(k, v);
+            for (_, glb) in &g_living_begins {
+                if glb.has_been_rendered {
+                    let obj = scene.child_mut(glb.sprite_id).unwrap();
+                    obj.set_position(glb.position.x as f64, glb.position.y as f64);
+                } else {
+                    glb.render(&mut scene, &c, &mut g);
+                }
             }
         });
 
@@ -289,33 +267,15 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     Ok(())
 }
 
-fn rust_sprint(
-    scene: &mut Scene<Texture<Resources>>,
-    id: Uuid,
-) -> (Behavior<Animation>, Behavior<Animation>) {
+fn rust_sprint(scene: &mut Scene<Texture<Resources>>, id: Uuid) -> (Behavior<Animation>, Behavior<Animation>) {
     // Run a sequence of animations.
     let seq = Sequence(vec![
-        Action(Ease(
-            EaseFunction::CubicOut,
-            Box::new(ScaleTo(2.0, 0.5, 0.5)),
-        )),
-        Action(Ease(
-            EaseFunction::BounceOut,
-            Box::new(MoveBy(1.0, 0.0, 100.0)),
-        )),
-        Action(Ease(
-            EaseFunction::ElasticOut,
-            Box::new(MoveBy(2.0, 0.0, -100.0)),
-        )),
-        Action(Ease(
-            EaseFunction::BackInOut,
-            Box::new(MoveBy(1.0, 0.0, -100.0)),
-        )),
+        Action(Ease(EaseFunction::CubicOut, Box::new(ScaleTo(2.0, 0.5, 0.5)))),
+        Action(Ease(EaseFunction::BounceOut, Box::new(MoveBy(1.0, 0.0, 100.0)))),
+        Action(Ease(EaseFunction::ElasticOut, Box::new(MoveBy(2.0, 0.0, -100.0)))),
+        Action(Ease(EaseFunction::BackInOut, Box::new(MoveBy(1.0, 0.0, -100.0)))),
         Wait(0.5),
-        Action(Ease(
-            EaseFunction::ExponentialInOut,
-            Box::new(MoveBy(1.0, 0.0, 100.0)),
-        )),
+        Action(Ease(EaseFunction::ExponentialInOut, Box::new(MoveBy(1.0, 0.0, 100.0)))),
         Action(Blink(1.0, 5)),
         While(
             Box::new(WaitForever),
@@ -328,23 +288,12 @@ fn rust_sprint(
     scene.run(id, &seq);
 
     // This animation and the one above can run in parallel.
-    let rotate = Action(Ease(
-        EaseFunction::ExponentialInOut,
-        Box::new(RotateTo(2.0, 360.0)),
-    ));
+    let rotate = Action(Ease(EaseFunction::ExponentialInOut, Box::new(RotateTo(2.0, 360.0))));
     scene.run(id, &rotate);
     (seq, rotate)
 }
 
-fn move_object<T: piston_window::ImageSize>(
-    scene: &mut Scene<T>,
-    object_id: Uuid,
-    delta_x: f64,
-    delta_y: f64,
-) {
+fn move_object<T: piston_window::ImageSize>(scene: &mut Scene<T>, object_id: Uuid, delta_x: f64, delta_y: f64) {
     let obj = scene.child_mut(object_id).unwrap();
-    obj.set_position(
-        obj.get_position().0 + delta_x,
-        obj.get_position().1 + delta_y,
-    );
+    obj.set_position(obj.get_position().0 + delta_x, obj.get_position().1 + delta_y);
 }
