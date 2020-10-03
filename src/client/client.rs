@@ -10,6 +10,7 @@ use game_master::game_master_client::GameMasterClient;
 use game_master::Action;
 use game_master::GameStateRequest;
 use game_master::LivingBeing;
+use game_master::NewPlayerRequest;
 use tokio::sync::Mutex;
 
 pub mod game_master {
@@ -19,16 +20,28 @@ pub mod game_master {
 pub struct GameClient {
     game_master_client: Mutex<GameMasterClient<Channel>>,
     living_beings: Mutex<Vec<LivingBeing>>,
+    pub player_id: u64,
 }
 
 impl GameClient {
-    pub async fn new() -> Result<GameClient, Box<dyn Error>> {
+    pub async fn new(player_name: &str) -> Result<GameClient, Box<dyn Error>> {
         let channel = Endpoint::from_static("http://[::1]:50051").connect().await?;
 
-        let greeter_client = Mutex::new(GameMasterClient::new(channel.clone()));
+        let mut game_master_client = GameMasterClient::new(channel.clone());
+
+        let player_id = game_master_client
+            .new_player(NewPlayerRequest {
+                player_name: player_name.to_string(),
+            })
+            .await
+            .unwrap()
+            .get_ref()
+            .id;
+
         Ok(GameClient {
-            game_master_client: greeter_client,
+            game_master_client: Mutex::new(game_master_client),
             living_beings: Mutex::new(Vec::new()),
+            player_id: player_id,
         })
     }
 
@@ -70,7 +83,7 @@ impl GameClient {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let game_client = GameClient::new().await?;
+    let game_client = GameClient::new("GGYE").await?;
 
     game_client.subscribe_to_game_state_update().await;
     let window = initscr();

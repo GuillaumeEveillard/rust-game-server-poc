@@ -30,10 +30,15 @@ message GameStateResponse {
 }
 
 message LivingBeing {
+  enum Class {
+    MAGE = 0;
+    GOLEM = 1;
+  }
   uint64 id = 1;
   string name = 2;
   uint32 health = 3;
   Position position = 4;
+  Class class = 5;
 }
 
 message Position { 

@@ -15,7 +15,9 @@ use sprite::*;
 use uuid::Uuid;
 
 use client::game_master::action::Spell;
+use client::game_master::living_being::Class;
 use client::game_master::LivingBeing;
+use client::game_master::NewPlayerRequest;
 use client::GameClient;
 use std::collections::hash_map::Entry;
 
@@ -146,7 +148,7 @@ impl SpriteLoader {
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let game_client = Arc::new(GameClient::new().await?);
+    let game_client = Arc::new(GameClient::new("GGYE").await?);
 
     let game_client_cloned = Arc::clone(&game_client);
     tokio::spawn(async move {
@@ -181,6 +183,8 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut g_living_begins: HashMap<u64, GLivingBeing> = HashMap::new();
 
+    let mut player_sprint_id: Option<Uuid> = Option::None;
+
     let mut c = 0;
     while let Some(e) = window.next() {
         println!("Counter {}", c);
@@ -197,19 +201,27 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                 }
                 Entry::Vacant(mut e) => {
                     println!("Creating {} ", new_lb.id);
-                    let golem_sprite_def = SpriteDef::new("Golem_01_Idle_000.png".to_string(), Size::new(720, 480));
-                    let mut golem_sprite = sprite_loader.load(&golem_sprite_def.path);
-                    let golem_id = scene.add_child(golem_sprite);
+                    let mut sprite_def = if new_lb.class == Class::Golem as i32 {
+                        SpriteDef::new("Golem_01_Idle_000.png".to_string(), Size::new(720, 480))
+                    } else {
+                        SpriteDef::new("mage-idle1.png".to_string(), Size::new(128, 128))
+                    };
+                    let scale = if new_lb.class == Class::Golem as i32 { 0.25 } else { 1.0 };
+                    let mut sprite = sprite_loader.load(&sprite_def.path);
+                    let sprite_id = scene.add_child(sprite);
+                    if (game_client.player_id == new_lb.id) {
+                        player_sprint_id = Option::Some(sprite_id)
+                    }
                     let glb = GLivingBeing::new(
                         new_lb.name.clone(),
-                        golem_sprite_def,
+                        sprite_def,
                         Position {
                             x: new_lb.position.as_ref().unwrap().x,
                             y: new_lb.position.as_ref().unwrap().y,
                         },
-                        0.25,
+                        scale,
                         new_lb.health,
-                        golem_id,
+                        sprite_id,
                         false,
                     );
                     e.insert(glb);
@@ -242,16 +254,16 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         });
 
         if let Some(Button::Keyboard(Key::D)) = e.press_args() {
-            move_object(&mut scene, mage_id, 10.0, 0.0)
+            move_object(&mut scene, player_sprint_id.unwrap(), 10.0, 0.0)
         }
         if let Some(Button::Keyboard(Key::Q)) = e.press_args() {
-            move_object(&mut scene, mage_id, -10.0, 0.0)
+            move_object(&mut scene, player_sprint_id.unwrap(), -10.0, 0.0)
         }
         if let Some(Button::Keyboard(Key::Z)) = e.press_args() {
-            move_object(&mut scene, mage_id, 0.0, -10.0)
+            move_object(&mut scene, player_sprint_id.unwrap(), 0.0, -10.0)
         }
         if let Some(Button::Keyboard(Key::S)) = e.press_args() {
-            move_object(&mut scene, mage_id, 0.0, 10.0)
+            move_object(&mut scene, player_sprint_id.unwrap(), 0.0, 10.0)
         }
 
         if let Some(Button::Keyboard(Key::D1)) = e.press_args() {

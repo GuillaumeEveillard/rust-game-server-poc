@@ -5,7 +5,9 @@ use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 use tonic::{transport::Server, Request, Response, Status};
 
+use game_master::action::Spell;
 use game_master::game_master_server::{GameMaster, GameMasterServer};
+use game_master::living_being::Class;
 use game_master::{
     Action, ActionResult, GameStateRequest, GameStateResponse, LivingBeing, NewPlayerRequest, NewPlayerResponse,
     Position,
@@ -18,7 +20,6 @@ pub mod game_master {
 struct StateManager {
     next_id: u64,
     counter: u32,
-    players: Vec<LivingBeing>,
     living_beings: Vec<LivingBeing>,
 }
 
@@ -29,12 +30,12 @@ impl StateManager {
             id: 1,
             name: "Murloc du chaos".to_string(),
             health: 100,
+            class: Class::Golem as i32,
             position: Some(Position { x: 50, y: 50 }),
         });
         StateManager {
             next_id: 2,
             counter: 0,
-            players: Vec::new(),
             living_beings,
         }
     }
@@ -74,17 +75,19 @@ impl GameMaster for GameServer {
         let mut guard = self.state_manager.lock().await;
         let id = guard.next_id;
         guard.next_id += 1;
-        guard.players.push(LivingBeing {
+        guard.living_beings.push(LivingBeing {
             id,
             name: request.get_ref().player_name.to_string(),
             health: 100,
+            class: Class::Mage as i32,
             position: Some(Position {
                 x: (id * 50) as u32,
                 y: 50,
             }),
         });
 
-        Ok(Response::new(NewPlayerResponse { id: 1 }))
+        println!("New player created {}", request.get_ref().player_name);
+        Ok(Response::new(NewPlayerResponse { id }))
     }
 
     async fn send_action(&self, request: Request<Action>) -> Result<Response<ActionResult>, Status> {
