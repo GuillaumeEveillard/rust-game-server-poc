@@ -5,7 +5,6 @@ use tokio::sync::mpsc;
 use tokio::sync::Mutex;
 use tonic::{transport::Server, Request, Response, Status};
 
-use game_master::action::Spell;
 use game_master::game_master_server::{GameMaster, GameMasterServer};
 use game_master::living_being::Class;
 use game_master::{

@@ -16,8 +16,6 @@ use uuid::Uuid;
 
 use client::game_master::action::Spell;
 use client::game_master::living_being::Class;
-use client::game_master::LivingBeing;
-use client::game_master::NewPlayerRequest;
 use client::GameClient;
 use std::collections::hash_map::Entry;
 
@@ -166,21 +164,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 
     let mut sprite_loader = SpriteLoader::new(&mut window);
 
-    // let golem = GLivingBeing::new("Golem du chaos".to_string(),golem_sprite_def, Position::new(400, 500), 0.5, 100, golem_id);
-
-    // Rust sprite
-    let mut sprite = sprite_loader.load("rust.png");
-    sprite.set_position(width as f64 / 2.0, height as f64 / 2.0);
-    let id = scene.add_child(sprite);
-    let (rust_logo_seq, rust_logo_rotate) = rust_sprint(&mut scene, id);
-
-    // Mage sprite
-    let mut mage_sprite = sprite_loader.load("mage-idle1.png");
-    mage_sprite.set_position(200.0, 200.0);
-    let mage_id = scene.add_child(mage_sprite);
-
-    println!("Press any key to pause/resume the animation!");
-
     let mut g_living_begins: HashMap<u64, GLivingBeing> = HashMap::new();
 
     let mut player_sprint_id: Option<Uuid> = Option::None;
@@ -273,40 +256,10 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             game_client.send_action(Spell::FrostBall).await;
         }
 
-        if let Some(Button::Keyboard(Key::P)) = e.press_args() {
-            scene.toggle(id, &rust_logo_seq);
-            scene.toggle(id, &rust_logo_rotate);
-        }
         c += 1;
     }
 
     Ok(())
-}
-
-fn rust_sprint(scene: &mut Scene<Texture<Resources>>, id: Uuid) -> (Behavior<Animation>, Behavior<Animation>) {
-    // Run a sequence of animations.
-    let seq = Sequence(vec![
-        Action(Ease(EaseFunction::CubicOut, Box::new(ScaleTo(2.0, 0.5, 0.5)))),
-        Action(Ease(EaseFunction::BounceOut, Box::new(MoveBy(1.0, 0.0, 100.0)))),
-        Action(Ease(EaseFunction::ElasticOut, Box::new(MoveBy(2.0, 0.0, -100.0)))),
-        Action(Ease(EaseFunction::BackInOut, Box::new(MoveBy(1.0, 0.0, -100.0)))),
-        Wait(0.5),
-        Action(Ease(EaseFunction::ExponentialInOut, Box::new(MoveBy(1.0, 0.0, 100.0)))),
-        Action(Blink(1.0, 5)),
-        While(
-            Box::new(WaitForever),
-            vec![
-                Action(Ease(EaseFunction::QuadraticIn, Box::new(FadeOut(1.0)))),
-                Action(Ease(EaseFunction::QuadraticOut, Box::new(FadeIn(1.0)))),
-            ],
-        ),
-    ]);
-    scene.run(id, &seq);
-
-    // This animation and the one above can run in parallel.
-    let rotate = Action(Ease(EaseFunction::ExponentialInOut, Box::new(RotateTo(2.0, 360.0))));
-    scene.run(id, &rotate);
-    (seq, rotate)
 }
 
 fn move_object<T: piston_window::ImageSize>(scene: &mut Scene<T>, object_id: Uuid, delta_x: f64, delta_y: f64) {
