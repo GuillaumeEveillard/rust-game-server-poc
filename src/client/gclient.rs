@@ -9,7 +9,7 @@ use std::rc::Rc;
 use std::sync::Arc;
 
 use ai_behavior::{Action, Behavior, Sequence, Wait, WaitForever, While};
-use gfx_device_gl::{CommandBuffer, Resources};
+use gfx_device_gl::{CommandBuffer, Device, Resources};
 use piston_window::*;
 use sprite::*;
 use uuid::Uuid;
@@ -17,6 +17,7 @@ use uuid::Uuid;
 use client::game_master::action::Spell;
 use client::game_master::living_being::Class;
 use client::GameClient;
+use gfx::texture::ResourceDesc;
 use std::collections::hash_map::Entry;
 
 mod client;
@@ -118,7 +119,7 @@ struct SpriteLoader {
 
 impl SpriteLoader {
     fn new(window: &mut PistonWindow) -> SpriteLoader {
-        let mut texture_context = TextureContext {
+        let texture_context = TextureContext {
             factory: window.factory.clone(),
             encoder: window.factory.create_command_buffer().into(),
         };
@@ -144,37 +145,56 @@ impl SpriteLoader {
     }
 }
 
-#[tokio::main]
-async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let game_client = Arc::new(GameClient::new("GGYE").await?);
+struct Game {
+    game_client: Arc<GameClient>,
+    window: PistonWindow,
+    scene: Scene<Texture<Resources>>,
+    sprite_loader: SpriteLoader,
+    g_living_begins: HashMap<u64, GLivingBeing>,
+    player_sprint_id: Option<Uuid>,
+}
 
-    let game_client_cloned = Arc::clone(&game_client);
-    tokio::spawn(async move {
-        game_client_cloned.subscribe_to_game_state_update().await;
-    });
+impl Game {
+    async fn new() -> Game {
+        let game_client = Arc::new(GameClient::new("GGYE").await.unwrap());
 
-    let (width, height) = (1024, 768);
-    let opengl = OpenGL::V3_2;
-    let mut window: PistonWindow = WindowSettings::new("piston: sprite", (width, height))
-        .exit_on_esc(true)
-        .graphics_api(opengl)
-        .build()
-        .unwrap();
-    let mut scene = Scene::new();
+        let game_client_cloned = Arc::clone(&game_client);
+        tokio::spawn(async move {
+            game_client_cloned.subscribe_to_game_state_update().await;
+        });
 
-    let mut sprite_loader = SpriteLoader::new(&mut window);
+        let (width, height) = (1024, 768);
+        let opengl = OpenGL::V3_2;
+        let mut window: PistonWindow = WindowSettings::new("piston: sprite", (width, height))
+            .exit_on_esc(true)
+            .graphics_api(opengl)
+            .build()
+            .unwrap();
 
-    let mut g_living_begins: HashMap<u64, GLivingBeing> = HashMap::new();
+        let sprite_loader = SpriteLoader::new(&mut window);
 
-    let mut player_sprint_id: Option<Uuid> = Option::None;
+        Game {
+            game_client,
+            window,
+            scene: Scene::new(),
+            sprite_loader,
+            g_living_begins: HashMap::new(),
+            player_sprint_id: Option::None,
+        }
+    }
 
-    let mut c = 0;
-    while let Some(e) = window.next() {
-        println!("Counter {}", c);
+    async fn game_loop(&mut self) {
+        while let Some(e) = self.window.next() {
+            self.process_state().await;
+            self.draw(&e);
+            self.handle_input(e).await
+        }
+    }
 
-        let guard = game_client.get_living_beings().lock().await;
+    async fn process_state(&mut self) {
+        let guard = self.game_client.get_living_beings().lock().await;
         for new_lb in guard.iter() {
-            match g_living_begins.entry(new_lb.id) {
+            match self.g_living_begins.entry(new_lb.id) {
                 Entry::Occupied(mut e) => {
                     println!("Updating {} ", new_lb.id);
                     e.get_mut().position = Position {
@@ -182,18 +202,18 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
                         y: new_lb.position.as_ref().unwrap().y,
                     };
                 }
-                Entry::Vacant(mut e) => {
+                Entry::Vacant(e) => {
                     println!("Creating {} ", new_lb.id);
-                    let mut sprite_def = if new_lb.class == Class::Golem as i32 {
+                    let sprite_def = if new_lb.class == Class::Golem as i32 {
                         SpriteDef::new("Golem_01_Idle_000.png".to_string(), Size::new(720, 480))
                     } else {
                         SpriteDef::new("mage-idle1.png".to_string(), Size::new(128, 128))
                     };
                     let scale = if new_lb.class == Class::Golem as i32 { 0.25 } else { 1.0 };
-                    let mut sprite = sprite_loader.load(&sprite_def.path);
-                    let sprite_id = scene.add_child(sprite);
-                    if (game_client.player_id == new_lb.id) {
-                        player_sprint_id = Option::Some(sprite_id)
+                    let mut sprite = self.sprite_loader.load(&sprite_def.path);
+                    let sprite_id = self.scene.add_child(sprite);
+                    if (self.game_client.player_id == new_lb.id) {
+                        self.player_sprint_id = Option::Some(sprite_id)
                     }
                     let glb = GLivingBeing::new(
                         new_lb.name.clone(),
@@ -213,10 +233,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
         }
 
         std::mem::drop(guard);
+    }
 
-        scene.event(&e);
+    fn draw(&mut self, e: &Event) {
+        self.scene.event(e);
+        let g_living_begins = &self.g_living_begins;
+        let mut scene = &mut self.scene;
 
-        window.draw_2d(&e, |c, mut g, _| {
+        let x = |c: Context, g: &mut G2d<'_>, _: &mut Device| {
             clear([1.0, 1.0, 1.0, 1.0], g);
             scene.draw(c.transform, g);
 
@@ -226,39 +250,46 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
             rectangle(red, rect, c.transform, g);
             Rectangle::new_border(black, 2.0).draw(rect, &c.draw_state, c.transform, g);
 
-            for (_, glb) in &g_living_begins {
+            for (_, glb) in g_living_begins {
                 if glb.has_been_rendered {
                     let obj = scene.child_mut(glb.sprite_id).unwrap();
                     obj.set_position(glb.position.x as f64, glb.position.y as f64);
                 } else {
-                    glb.render(&mut scene, &c, &mut g);
+                    glb.render(&mut scene, &c, g);
                 }
             }
-        });
+        };
+        let window = &mut self.window;
+        window.draw_2d(e, x);
+    }
 
+    async fn handle_input(&mut self, e: Event) {
         if let Some(Button::Keyboard(Key::D)) = e.press_args() {
-            move_object(&mut scene, player_sprint_id.unwrap(), 10.0, 0.0)
+            move_object(&mut self.scene, self.player_sprint_id.unwrap(), 10.0, 0.0)
         }
         if let Some(Button::Keyboard(Key::Q)) = e.press_args() {
-            move_object(&mut scene, player_sprint_id.unwrap(), -10.0, 0.0)
+            move_object(&mut self.scene, self.player_sprint_id.unwrap(), -10.0, 0.0)
         }
         if let Some(Button::Keyboard(Key::Z)) = e.press_args() {
-            move_object(&mut scene, player_sprint_id.unwrap(), 0.0, -10.0)
+            move_object(&mut self.scene, self.player_sprint_id.unwrap(), 0.0, -10.0)
         }
         if let Some(Button::Keyboard(Key::S)) = e.press_args() {
-            move_object(&mut scene, player_sprint_id.unwrap(), 0.0, 10.0)
+            move_object(&mut self.scene, self.player_sprint_id.unwrap(), 0.0, 10.0)
         }
 
         if let Some(Button::Keyboard(Key::D1)) = e.press_args() {
-            game_client.send_action(Spell::Fireball).await;
+            self.game_client.send_action(Spell::Fireball).await;
         }
         if let Some(Button::Keyboard(Key::D2)) = e.press_args() {
-            game_client.send_action(Spell::FrostBall).await;
+            self.game_client.send_action(Spell::FrostBall).await;
         }
-
-        c += 1;
     }
+}
 
+#[tokio::main]
+async fn main() -> Result<(), Box<dyn std::error::Error>> {
+    let mut game = Game::new().await;
+    game.game_loop().await;
     Ok(())
 }
 
